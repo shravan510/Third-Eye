@@ -1,0 +1,7 @@
+path: ./datasets/third_eye_traffic
+train: images/train
+val: images/val
+test: images/test
+
+nc: 7
+names: ['motorcycle', 'person', 'car', 'truck', 'bus', 'helmet', 'license_plate']

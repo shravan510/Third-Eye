@@ -1,8 +1,3 @@
-# ============================================================
-#   THIRD EYE TRAFFIC — VIDEO SOURCE CONFIGURATION
-#   Edit ONLY this file to switch input source.
-#   No code changes needed.
-# ============================================================
 
 cameras:
   - id: "CAM_001"
@@ -13,29 +8,25 @@ cameras:
     gps_lat: 16.8524
     gps_lng: 74.5815
 
-    # --- CHOOSE ONE SOURCE TYPE (uncomment one block) ---
-
-    # ✅ OPTION 1: Smartphone as IP Webcam (RECOMMENDED for college demo)
-    # Install "IP Webcam" app on Android phone → Start Server → copy the URL shown
-    # Make sure phone and laptop are on the SAME WiFi network
+    
     source_type: "ip_webcam"
-    source_path: "http://10.225.113.197:8080/video"
+    source_path: "http://10.40.14.46:8080/video"
 
-    # ✅ OPTION 2: Local video file — plays at real video speed (not fast-forwarded)
+  
     # source_type: "file"
     # source_path: "../demo_videos/sangli_traffic.mp4"
 
-    # Option 3: Laptop webcam
+    
     # source_type: "webcam"
     # source_path: 0
 
-    # Option 4: RTSP IP camera (real deployment)
+    
     # source_type: "rtsp"
     # source_path: "rtsp://192.168.1.100:554/stream"
 
 inference:
-  loop_video: true           # Loop video file when it ends (good for demo)
-  realtime_playback: true    # When source_type=file, throttle to real video FPS
-  frame_skip: auto           # "auto" = let hardware_manager.py decide based on GPU/CPU
+  loop_video: true           
+  realtime_playback: true    
+  frame_skip: auto           
   confidence_threshold: 0.45
-  violation_frame_buffer: 3  # Frames before flagging violation (false positive filter)
+  violation_frame_buffer: 3  

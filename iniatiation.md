@@ -147,7 +147,7 @@ Once all configurations and databases are populated, execute these steps:
 cd backend
 node scripts/seed.js
 ```
-*This will create the default admin account: `admin@thirdeye.com` / `Admin@123`.*
+*This will create the default admin account: `  ` / `Admin@123`.*
 
 **2. Launch Python Engine:**
 ```bash

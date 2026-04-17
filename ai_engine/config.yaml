@@ -12,15 +12,19 @@ cameras:
     source_type: "ip_webcam"
     source_path: "http://10.40.14.46:8080/video"
 
-  
+    # To process a folder of videos/images:
+    # source_type: "directory"
+    # source_path: "../demo_videos/"
+    
+    # To process a single file:
     # source_type: "file"
     # source_path: "../demo_videos/sangli_traffic.mp4"
 
-    
+    # To use a webcam:
     # source_type: "webcam"
     # source_path: 0
 
-    
+    # To use an RTSP stream:
     # source_type: "rtsp"
     # source_path: "rtsp://192.168.1.100:554/stream"
 
@@ -30,3 +34,13 @@ inference:
   frame_skip: auto           
   confidence_threshold: 0.45
   violation_frame_buffer: 3  
+
+  homography:
+    # 4 reference points (bottom-left, bottom-right, top-left, top-right) mapping a road polygon
+    pts_src: [[300, 720], [980, 720], [600, 300], [680, 300]] 
+    real_world_width_meters: 7.0 # standard India 2-lane road width
+    real_world_length_meters: 15.0
+
+  evidence_clip:
+    pre_buffer_frames: 30
+    post_buffer_frames: 60

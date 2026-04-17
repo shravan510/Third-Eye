@@ -37,7 +37,7 @@ function ViolationCard({ v }) {
           {v.plate_number || 'UNKNOWN'}
         </div>
         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>
-          📍 {v.location_name} • {new Date(v.created_at || Date.now()).toLocaleTimeString()}
+          📍 {v.location_name || 'Processing File'} • {new Date(v.created_at || Date.now()).toLocaleTimeString()}
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -51,6 +51,11 @@ export default function Dashboard() {
   const [violations, setViolations] = useState(DEMO_VIOLATIONS);
   const [stats, setStats] = useState({ total: 3, pending: 2, verified: 1 });
   const [streamOk, setStreamOk] = useState(false);
+  
+  const [files, setFiles] = useState([]);
+  const [isDirectoryMode, setIsDirectoryMode] = useState(false);
+  const [currentFile, setCurrentFile] = useState('');
+  const [streamKey, setStreamKey] = useState(Date.now());
 
   useEffect(() => {
     const socket = io('http://localhost:3000', { reconnectionAttempts: 3 });
@@ -61,16 +66,40 @@ export default function Dashboard() {
     socket.on('violation_verified', () => {
       setStats(prev => ({ ...prev, verified: prev.verified + 1, pending: Math.max(0, prev.pending - 1) }));
     });
+    
+    // Check directory mode
+    fetch('http://localhost:8000/api/files')
+      .then(res => res.json())
+      .then(data => {
+        if (data.files) {
+          setIsDirectoryMode(true);
+          setFiles(data.files);
+        }
+      })
+      .catch(err => console.error(err));
+      
     return () => socket.disconnect();
   }, []);
 
+  const handleFileChange = (e) => {
+    const filename = e.target.value;
+    setCurrentFile(filename);
+    
+    fetch(`http://localhost:8000/api/process-file/${filename}`, { method: 'POST' })
+      .then(res => res.json())
+      .then(data => {
+         console.log("Processing started:", data);
+         // Force reload of MJPEG stream by changing key
+         setTimeout(() => setStreamKey(Date.now()), 1000);
+      });
+  };
+
   return (
     <>
-      {/* Top Bar */}
       <header className="topbar">
         <div className="topbar-title">
           <span className="live-dot" />
-          Live Surveillance — CAM_001
+          {isDirectoryMode ? 'File Processing Mode' : 'Live Surveillance — CAM_001'}
         </div>
         <div className="stats-bar">
           <StatPill icon="🚨" label="Today"   value={stats.total}    />
@@ -79,14 +108,23 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Content */}
       <div className="content-area">
 
-        {/* Live Feed */}
         <div className="live-feed-panel">
           <div className="live-feed-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-bright)' }}>CAM_001 · Sangli Main Road</span>
+              {isDirectoryMode ? (
+                <select 
+                   value={currentFile} 
+                   onChange={handleFileChange}
+                   style={{ padding: '4px 8px', borderRadius: '4px', background: 'var(--panel-bg)', color: 'var(--text-bright)', border: '1px solid var(--border-color)', outline: 'none' }}
+                >
+                  <option value="" disabled>Select a file to process...</option>
+                  {files.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+              ) : (
+                <span style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-bright)' }}>CAM_001 · Sangli Main Road</span>
+              )}
             </div>
             <span style={{ fontSize: '0.8rem', color: streamOk ? 'var(--accent-green)' : 'var(--accent-amber)', display: 'flex', alignItems: 'center', gap: 5 }}>
               <span className="live-dot" style={{ background: streamOk ? 'var(--accent-green)' : 'var(--accent-amber)', boxShadow: `0 0 6px ${streamOk ? 'var(--accent-green)' : 'var(--accent-amber)'}` }} />
@@ -95,7 +133,8 @@ export default function Dashboard() {
           </div>
           <div className="live-feed-view">
             <img
-              src="http://localhost:8000/api/live-feed/CAM_001"
+              key={streamKey}
+              src={`http://localhost:8000/api/live-feed/CAM_001`}
               alt="Live AI Stream"
               onLoad={() => setStreamOk(true)}
               onError={() => setStreamOk(false)}
@@ -114,7 +153,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Violation Feed */}
         <div className="violation-feed">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
             <h3 style={{ margin: 0, fontFamily: "'Space Grotesk', sans-serif", fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-bright)' }}>

@@ -6,11 +6,16 @@ services:
     environment:
       POSTGRES_DB: third_eye_traffic
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_PASSWORD: admin
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d third_eye_traffic"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   mongodb:
     image: mongo:7
@@ -18,6 +23,22 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # db_init:
+  #   image: postgres:15
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./schema.sql:/schema.sql:ro
+  #   command: ["psql", "-h", "postgres", "-U", "postgres", "-d", "third_eye_traffic", "-f", "/schema.sql"]
+  #   environment:
+  #     PGPASSWORD: admin
 
   ai_engine:
     build: ./ai_engine
@@ -26,7 +47,27 @@ services:
     volumes:
       - ./evidence:/app/evidence
     depends_on:
-      - postgres
+      db_init:
+        condition: service_completed_successfully
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # backend_seed:
+  #   build: ./backend
+  #   depends_on:
+  #     mongodb:
+  #       condition: service_healthy
+  #   env_file:
+  #     - ./backend/.env
+  #   environment:
+  #     MONGO_URI: mongodb://mongodb:27017/third_eye_users
+  #   command: ["npm", "run", "seed"]
 
   backend:
     build: ./backend
@@ -35,18 +76,29 @@ services:
     volumes:
       - ./evidence:/app/evidence
     depends_on:
-      - postgres
-      - mongodb
-      - ai_engine
+      ai_engine:
+        condition: service_healthy
+      backend_seed:
+        condition: service_completed_successfully
     env_file:
       - ./backend/.env
+    environment:
+      PG_HOST: postgres
+      MONGO_URI: mongodb://mongodb:27017/third_eye_users
+      PYTHON_API_URL: http://ai_engine:8000
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build: ./frontend
     ports:
       - "5173:5173"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

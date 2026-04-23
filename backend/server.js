@@ -20,6 +20,9 @@ app.use(express.json());
 // Expose Evidence path
 app.use('/evidence', express.static(path.resolve(process.env.EVIDENCE_BASE_PATH || '../evidence')));
 
+// Healthcheck endpoint
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
 // Mount routes
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/violations', require('./routes/violations.routes'));

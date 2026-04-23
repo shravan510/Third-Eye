@@ -10,7 +10,7 @@ cameras:
 
     
     source_type: "ip_webcam"
-    source_path: "http://10.40.14.46:8080/video"
+    source_path: "http://10.40.14.46:8081/video"
 
     # To process a folder of videos/images:
     # source_type: "directory"

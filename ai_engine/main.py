@@ -20,6 +20,7 @@ from calibrator import AutoCalibrator
 from violation_classifier import ViolationClassifier
 from evidence_handler import EvidenceHandler
 from ocr_engine import OCREngine
+from helmet_detector import HelmetDetector
 
 app = FastAPI(title="Third Eye Traffic AI Engine")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -39,10 +40,25 @@ speed_est = SpeedEstimator(homography_config=config.get('inference', {}).get('ho
 classifier = ViolationClassifier(fps_buffer=config.get('inference', {}).get('violation_frame_buffer', 3))
 evidence_handler = EvidenceHandler()
 ocr = OCREngine(use_gpu=True if 'cuda' in device else False)
+helmet_detector = HelmetDetector()
 
 global_frame_buffer = None
 current_processing_thread = None
 stop_processing_flag = False
+
+def count_persons_on_vehicle(vehicle_bbox, person_boxes: list) -> int:
+    """Count person bounding-box centers that fall inside the vehicle bbox.
+    Always returns at least 1 for motorcycles (rider counts even if undetected)."""
+    x1, y1, x2, y2 = vehicle_bbox
+    count = 0
+    for pb in person_boxes:
+        px1, py1, px2, py2 = pb
+        cx = (px1 + px2) / 2.0
+        cy = (py1 + py2) / 2.0
+        if x1 <= cx <= x2 and y1 <= cy <= y2:
+            count += 1
+    return max(count, 1)
+
 
 def notify_backend(violation_data):
     # Dummy implementation for now, should hit backend API
@@ -80,6 +96,11 @@ def video_processing_loop(camera_config):
             
             current_track_ids = set()
             
+            person_boxes = [
+                t2['bbox'] for t2 in tracks
+                if t2['class_name'] == 'person' and not t2.get('lost', False)
+            ]
+
             for t in tracks:
                 t_id = t['track_id']
                 if not t.get('lost', False):
@@ -91,9 +112,9 @@ def video_processing_loop(camera_config):
                 # estimate speed
                 speed = speed_est.estimate(t_id, cx, cy, frame_time=time.time())
                 
-                # Check violations (mocking persons_on_bike=2, helmet=False for demo purposes if motorcycle)
-                persons = 2 if t['class_name'] == 'motorcycle' else 0
-                helmet = False
+                # Check violations
+                persons = count_persons_on_vehicle(t['bbox'], person_boxes) if t['class_name'] == 'motorcycle' else 0
+                helmet = helmet_detector.detect_helmet(frame, t['bbox'])
                 
                 violations = classifier.check_violations(t_id, t['class_name'], speed, speed_limit, persons_on_bike=persons, helmet_detected=helmet)
                 for v in violations:

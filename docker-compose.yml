@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   postgres:
@@ -29,16 +29,16 @@ services:
       timeout: 5s
       retries: 5
 
-  # db_init:
-  #   image: postgres:15
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   volumes:
-  #     - ./schema.sql:/schema.sql:ro
-  #   command: ["psql", "-h", "postgres", "-U", "postgres", "-d", "third_eye_traffic", "-f", "/schema.sql"]
-  #   environment:
-  #     PGPASSWORD: admin
+  db_init:
+    image: postgres:15
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./schema.sql:/schema.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "postgres", "-d", "third_eye_traffic", "-f", "/schema.sql"]
+    environment:
+      PGPASSWORD: admin
 
   ai_engine:
     build: ./ai_engine
@@ -50,7 +50,7 @@ services:
       db_init:
         condition: service_completed_successfully
       mongodb:
-        condition: service_healthy
+      condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 10s
@@ -58,16 +58,16 @@ services:
       retries: 5
       start_period: 5s
 
-  # backend_seed:
-  #   build: ./backend
-  #   depends_on:
-  #     mongodb:
-  #       condition: service_healthy
-  #   env_file:
-  #     - ./backend/.env
-  #   environment:
-  #     MONGO_URI: mongodb://mongodb:27017/third_eye_users
-  #   command: ["npm", "run", "seed"]
+  backend_seed:
+    build: ./backend
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGO_URI: mongodb://mongodb:27017/third_eye_users
+    command: ["npm", "run", "seed"]
 
   backend:
     build: ./backend

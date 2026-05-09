@@ -10,13 +10,13 @@ cameras:
 
     
     source_type: "ip_webcam"
-    source_path: "http://10.40.14.46:8081/video"
+    source_path: "http://10.40.14.84:8081/video"
 
     # To process a folder of videos/images:
     # source_type: "directory"
     # source_path: "../demo_videos/"
     
-    # To process a single file:
+    # To process a single file:g
     # source_type: "file"
     # source_path: "../demo_videos/sangli_traffic.mp4"
 

@@ -60,26 +60,63 @@ def count_persons_on_vehicle(vehicle_bbox, person_boxes: list) -> int:
     return max(count, 1)
 
 
-def notify_backend(violation_data):
-    # Dummy implementation for now, should hit backend API
+def notify_backend(camera_id, track_id, violation_type, speed_kmh, plate_number, location_name, evidence_file_path=None):
+    """Send violation to backend. Falls back to localhost when not running in Docker."""
     try:
-        pass # requests.post('http://localhost:3000/api/violations', json=violation_data)
-    except:
-        pass
+        # Try Docker service name first, fall back to localhost for local dev
+        backend_url = os.getenv('BACKEND_URL', 'http://localhost:3000')
+        url = f'{backend_url}/api/violations/ingest'
+        data = {
+            'camera_id': camera_id,
+            'track_id': str(track_id),
+            'violation_type': violation_type,
+            'speed_kmh': str(round(speed_kmh, 1)) if speed_kmh else '0',
+            'plate_number': plate_number or 'UNKNOWN',
+            'location_name': location_name,
+            'evidence_type': 'image',
+        }
+        files = {}
+        if evidence_file_path and os.path.exists(evidence_file_path):
+            files['evidence'] = open(evidence_file_path, 'rb')
+        resp = requests.post(url, data=data, files=files, timeout=5)
+        if resp.status_code == 201:
+            print(f'[OK] Violation logged: {violation_type} track={track_id} plate={plate_number}')
+        else:
+            print(f'[WARN] Backend returned {resp.status_code}: {resp.text[:200]}')
+    except Exception as e:
+        print(f'[WARN] Backend notification failed: {e}')
+
+# Tracks that have already been reported (even while still in frame)
+# Format: {track_id: set of violation_types already sent to backend}
+reported_violations: dict = {}
+# Per-track last known speed & plate (updated each frame for immediate reporting)
+track_last_speed: dict = {}
+track_best_plate: dict = {}
+
+
+def report_violation_now(camera_id, t_id, vtype, speed, plate, location, frame, bbox):
+    """Save evidence immediately and POST to backend without waiting for track to vanish."""
+    # Save a snapshot right now
+    img_file = evidence_handler.save_image_evidence(camera_id, t_id, frame, bbox, vtype)
+    date_str = time.strftime('%Y-%m-%d')
+    evidence_path = os.path.join('../evidence', camera_id, date_str, img_file) if img_file else None
+    notify_backend(camera_id, t_id, vtype, speed, plate, location, evidence_path)
+
 
 def video_processing_loop(camera_config):
-    global global_frame_buffer, stop_processing_flag
+    global global_frame_buffer, stop_processing_flag, reported_violations, track_last_speed, track_best_plate
     source = VideoSource(camera_config)
     print(f"[*] Started processing loop for: {camera_config.get('source_path')}")
-    
+
     speed_limit = camera_config.get('speed_limit_kmh', 40)
-    camera_id = camera_config.get('id', 'CAM_001')
-    
+    camera_id   = camera_config.get('id', 'CAM_001')
+    location    = camera_config.get('location_name', config.get('cameras', [{}])[0].get('location_name', 'Unknown'))
+
     frame_count = 0
     while not stop_processing_flag:
         ret, frame = source.read_frame()
         if not ret:
-            if source.source_type == "image":
+            if source.source_type in ('image', 'file') and source.loop:
                 time.sleep(0.1)
                 continue
             elif source.loop:
@@ -87,60 +124,99 @@ def video_processing_loop(camera_config):
                 continue
             else:
                 break
-            
+
         frame_count += 1
-        
-        if frame_count % frame_skip == 0 or source.source_type == "image":
+
+        if frame_count % frame_skip == 0 or source.source_type == 'image':
             results = detector.detect(frame)
-            tracks = tracker.extract_tracks(results)
-            
+            tracks  = tracker.extract_tracks(results)
+
             current_track_ids = set()
-            
+
+            # Collect all detected person boxes for triple-riding check
             person_boxes = [
                 t2['bbox'] for t2 in tracks
                 if t2['class_name'] == 'person' and not t2.get('lost', False)
             ]
 
             for t in tracks:
-                t_id = t['track_id']
+                t_id  = t['track_id']
+                cls   = t['class_name']
+                bbox  = t['bbox']
+
                 if not t.get('lost', False):
                     current_track_ids.add(t_id)
-                
-                x1, y1, x2, y2 = map(int, t['bbox'])
-                cx, cy = (x1 + x2) / 2.0, y2 # use bottom-center for speed
-                
-                # estimate speed
+
+                x1, y1, x2, y2 = map(int, bbox)
+                cx, cy = (x1 + x2) / 2.0, float(y2)
+
+                # Speed estimation
                 speed = speed_est.estimate(t_id, cx, cy, frame_time=time.time())
-                
-                # Check violations
-                persons = count_persons_on_vehicle(t['bbox'], person_boxes) if t['class_name'] == 'motorcycle' else 0
-                helmet = helmet_detector.detect_helmet(frame, t['bbox'])
-                
-                violations = classifier.check_violations(t_id, t['class_name'], speed, speed_limit, persons_on_bike=persons, helmet_detected=helmet)
-                for v in violations:
-                    evidence_handler.mark_violation(t_id, v)
-                    
-                evidence_handler.update_frame(t_id, frame, t['bbox'])
-                
-                # Draw
+                track_last_speed[t_id] = speed
+
+                # --- Violation checks (only for relevant vehicle types) ---
+                persons = 0
+                helmet  = True   # default: assume helmet (safe)
+
+                if cls == 'motorcycle':
+                    persons = count_persons_on_vehicle(bbox, person_boxes)
+                    # Helmet check only runs on motorcycles
+                    helmet = helmet_detector.detect_helmet(frame, bbox)
+
+                new_violations = classifier.check_violations(
+                    t_id, cls, speed, speed_limit,
+                    persons_on_bike=persons, helmet_detected=helmet
+                )
+
+                # --- OCR on plate region for this frame ---
+                plate = track_best_plate.get(t_id, 'UNKNOWN')
+                if cls in ('motorcycle', 'car', 'truck', 'bus'):
+                    y_plate = int(y2 - (y2 - y1) * 0.25)
+                    plate_crop = frame[y_plate:y2, x1:x2]
+                    if plate_crop.size > 0:
+                        ocr_text, conf = ocr.read_plate(plate_crop)
+                        if ocr_text and conf > 0.5:
+                            track_best_plate[t_id] = ocr_text
+                            plate = ocr_text
+
+                # --- Immediately report newly confirmed violations ---
+                for vtype in new_violations:
+                    evidence_handler.mark_violation(t_id, vtype)
+                    key = (t_id, vtype)
+                    if key not in reported_violations.get(t_id, set()):
+                        reported_violations.setdefault(t_id, set()).add(vtype)
+                        print(f'[ALERT] {vtype} confirmed for track {t_id} ({plate})')
+                        # Fire-and-forget in background thread so loop isn't blocked
+                        threading.Thread(
+                            target=report_violation_now,
+                            args=(camera_id, t_id, vtype, speed, plate, location, frame.copy(), bbox),
+                            daemon=True
+                        ).start()
+
+                evidence_handler.update_frame(t_id, frame, bbox)
+
+                # --- Draw overlay ---
                 color = (0, 0, 255) if t.get('lost') else (0, 255, 0)
+                if reported_violations.get(t_id):
+                    color = (0, 140, 255)   # orange = violation confirmed
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, f"{t['class_name']} {t_id} | {speed:.1f}km/h", (x1, max(y1-10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                
-            # Process vanished tracks
-            all_tracked = list(evidence_handler.track_data.keys())
-            for t_id in all_tracked:
+                label = f"{cls} {t_id} | {speed:.1f}km/h"
+                if reported_violations.get(t_id):
+                    label += ' [!]'
+                cv2.putText(frame, label, (x1, max(y1 - 10, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+            # --- Clean up state for tracks that have fully vanished ---
+            for t_id in list(evidence_handler.track_data.keys()):
                 if t_id not in current_track_ids:
-                    # Target lost fully
-                    img_file, vid_file = evidence_handler.process_vanished_track(camera_id, t_id)
-                    if img_file or vid_file:
-                        print(f"[!] Saved evidence for {t_id}: {img_file}, {vid_file}")
-                        # Could trigger notify_backend() here
-                        
+                    evidence_handler.process_vanished_track(camera_id, t_id)   # frees memory
+                    track_last_speed.pop(t_id, None)
+                    track_best_plate.pop(t_id, None)
+                    reported_violations.pop(t_id, None)
+
         global_frame_buffer = frame
-        
+
     source.release()
-    print(f"[*] Stopped processing loop")
+    print('[*] Stopped processing loop')
 
 # Auto-start logic
 first_cam = config.get('cameras', [{}])[0]

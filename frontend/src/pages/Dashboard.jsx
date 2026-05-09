@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import ReviewModal from '../components/ReviewModal';
 
 const VIOLATION_ICONS = {
   SPEEDING: '💨',
@@ -23,7 +24,7 @@ function StatPill({ icon, label, value }) {
   );
 }
 
-function ViolationCard({ v }) {
+function ViolationCard({ v, onReview }) {
   const type = v.violation_type?.toUpperCase?.() || 'UNKNOWN';
   const icon = VIOLATION_ICONS[type] || '⚠️';
   return (
@@ -41,16 +42,18 @@ function ViolationCard({ v }) {
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center' }}>
-        <button className="btn btn-ghost btn-sm">Review</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => onReview(v)}>Review</button>
       </div>
     </div>
   );
 }
 
 export default function Dashboard() {
-  const [violations, setViolations] = useState(DEMO_VIOLATIONS);
-  const [stats, setStats] = useState({ total: 3, pending: 2, verified: 1 });
+  const [violations, setViolations] = useState([]);
+  const [usingDemo, setUsingDemo] = useState(false);
+  const [stats, setStats] = useState({ total: 0, pending: 0, verified: 0 });
   const [streamOk, setStreamOk] = useState(false);
+  const [selectedViolation, setSelectedViolation] = useState(null);
   
   const [files, setFiles] = useState([]);
   const [isDirectoryMode, setIsDirectoryMode] = useState(false);
@@ -60,13 +63,42 @@ export default function Dashboard() {
   useEffect(() => {
     const socket = io('http://localhost:3000', { reconnectionAttempts: 3 });
     socket.on('new_violation', (violation) => {
-      setViolations(prev => [violation, ...prev].slice(0, 20));
+      setUsingDemo(false);
+      setViolations(prev => {
+        const filtered = prev.filter(v => !v.id?.startsWith('demo-'));
+        return [violation, ...filtered].slice(0, 20);
+      });
       setStats(prev => ({ ...prev, total: prev.total + 1, pending: prev.pending + 1 }));
     });
     socket.on('violation_verified', () => {
       setStats(prev => ({ ...prev, verified: prev.verified + 1, pending: Math.max(0, prev.pending - 1) }));
     });
-    
+
+    // Fetch real violations from backend
+    const token = localStorage.getItem('token');
+    fetch('http://localhost:3000/api/violations', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setViolations(data.slice(0, 20));
+          setStats({
+            total: data.length,
+            pending: data.filter(v => v.status === 'PENDING').length,
+            verified: data.filter(v => v.status === 'VERIFIED').length,
+          });
+          setUsingDemo(false);
+        } else {
+          setViolations(DEMO_VIOLATIONS);
+          setUsingDemo(true);
+        }
+      })
+      .catch(() => {
+        setViolations(DEMO_VIOLATIONS);
+        setUsingDemo(true);
+      });
+
     // Check directory mode
     fetch('http://localhost:8000/api/files')
       .then(res => res.json())
@@ -92,6 +124,16 @@ export default function Dashboard() {
          // Force reload of MJPEG stream by changing key
          setTimeout(() => setStreamKey(Date.now()), 1000);
       });
+  };
+
+  const handleVerify = (id) => {
+    setViolations(prev => prev.map(v => v.id === id ? { ...v, status: 'VERIFIED' } : v));
+    setStats(prev => ({ ...prev, verified: prev.verified + 1, pending: Math.max(0, prev.pending - 1) }));
+  };
+
+  const handleReject = (id) => {
+    setViolations(prev => prev.map(v => v.id === id ? { ...v, status: 'REJECTED' } : v));
+    setStats(prev => ({ ...prev, pending: Math.max(0, prev.pending - 1) }));
   };
 
   return (
@@ -161,6 +203,11 @@ export default function Dashboard() {
             <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Auto-refreshing</span>
           </div>
 
+          {usingDemo && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+              No live data yet — showing demo
+            </div>
+          )}
           {violations.length === 0 ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: 'var(--text-muted)', textAlign: 'center' }}>
               <div style={{ fontSize: '2.5rem' }}>👁️</div>
@@ -169,12 +216,20 @@ export default function Dashboard() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-              {violations.map((v, i) => <ViolationCard key={v.id || i} v={v} />)}
+              {violations.map((v, i) => <ViolationCard key={v.id || i} v={v} onReview={setSelectedViolation} />)}
             </div>
           )}
         </div>
 
       </div>
+      {selectedViolation && (
+        <ReviewModal
+          violation={selectedViolation}
+          onClose={() => setSelectedViolation(null)}
+          onVerify={handleVerify}
+          onReject={handleReject}
+        />
+      )}
     </>
   );
 }

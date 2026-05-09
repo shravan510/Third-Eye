@@ -43,12 +43,31 @@ exports.ingestViolation = async (req, res) => {
 
 exports.getAll = async (req, res) => {
     try {
-        const violations = await Violation.findAll({ order: [['created_at', 'DESC']] });
+        const { from, to, violation_type } = req.query;
+        const { Op } = require('sequelize');
+
+        const where = {};
+
+        if (from) {
+            where.created_at = { ...where.created_at, [Op.gte]: new Date(from + 'T00:00:00') };
+        }
+        if (to) {
+            where.created_at = { ...where.created_at, [Op.lte]: new Date(to + 'T23:59:59') };
+        }
+        if (violation_type && violation_type !== 'ALL') {
+            where.violation_type = violation_type;
+        }
+
+        const violations = await Violation.findAll({
+            where,
+            order: [['created_at', 'DESC']],
+        });
         res.json(violations);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
+
 
 exports.getById = async (req, res) => {
     try {

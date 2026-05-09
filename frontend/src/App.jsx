@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Violations from './pages/Violations';
 import Challans from './pages/Challans';
+import FineSettings from './pages/FineSettings';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 const ProtectedRoute = ({ children }) => {
@@ -13,9 +14,10 @@ const ProtectedRoute = ({ children }) => {
 };
 
 const NAV_ITEMS = [
-  { to: '/',           label: 'Dashboard',  icon: '⚡', end: true },
-  { to: '/violations', label: 'Violations', icon: '🚨' },
-  { to: '/challans',   label: 'Challans',   icon: '📋' },
+  { to: '/',             label: 'Dashboard',    icon: '⚡', end: true },
+  { to: '/violations',  label: 'Violations',   icon: '🚨' },
+  { to: '/challans',    label: 'Challans',     icon: '📋' },
+  { to: '/fine-settings', label: 'Fine Settings', icon: '⚙️' },
 ];
 
 const DashboardLayout = ({ children }) => {
@@ -82,6 +84,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
       <Route path="/violations" element={<ProtectedRoute><DashboardLayout><Violations /></DashboardLayout></ProtectedRoute>} />
       <Route path="/challans" element={<ProtectedRoute><DashboardLayout><Challans /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/fine-settings" element={<ProtectedRoute><DashboardLayout><FineSettings /></DashboardLayout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

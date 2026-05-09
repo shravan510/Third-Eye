@@ -57,3 +57,18 @@ CREATE TABLE violation_status_log (
   reason TEXT,                        -- optional note officer can add
   changed_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS fine_settings (
+    id SERIAL PRIMARY KEY,
+    violation_type VARCHAR(50) UNIQUE NOT NULL,
+    amount INTEGER NOT NULL,
+    section VARCHAR(100) NOT NULL,
+    description VARCHAR(200) NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO fine_settings (violation_type, amount, section, description) VALUES
+    ('SPEEDING',      2000, 'Section 112 MV Act', 'Exceeding speed limit'),
+    ('HELMETLESS',    1000, 'Section 129 MV Act', 'Not wearing helmet'),
+    ('TRIPLE_RIDING', 1000, 'Section 128 MV Act', 'Carrying excess pillion riders')
+ON CONFLICT (violation_type) DO NOTHING;

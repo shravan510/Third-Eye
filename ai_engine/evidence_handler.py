@@ -52,12 +52,12 @@ class EvidenceHandler:
 
     def process_vanished_track(self, camera_id, track_id):
         if track_id not in self.track_data:
-            return None, None
+            return None, None, None, None
             
         data = self.track_data[track_id]
         if not data['violation_types']:
             del self.track_data[track_id]
-            return None, None
+            return None, None, None, None
             
         frames = data['frames']
         bboxes = data['bboxes']
@@ -65,14 +65,14 @@ class EvidenceHandler:
         
         if not frames:
             del self.track_data[track_id]
-            return None, None
+            return None, None, None, None
             
         best_frame, best_bbox = self.select_best_frame(frames, bboxes)
         image_filename = self.save_image_evidence(camera_id, f"{track_id}_best", best_frame, best_bbox, violations[0])
         video_filename = self.save_video_clip(camera_id, track_id, frames, bboxes, violations[0])
         
         del self.track_data[track_id]
-        return image_filename, video_filename
+        return image_filename, video_filename, best_frame, best_bbox
 
     def save_image_evidence(self, camera_id, track_id, frame, bbox, violation_type="VIOLATION"):
         date_str = time.strftime("%Y-%m-%d")

@@ -17,19 +17,24 @@ exports.generate = async (req, res) => {
             evidence_thumbnail_path: violation.plate_image_path || violation.evidence_path,
             timestamp: violation.created_at,
             location_name: violation.location_name,
-            camera_id: violation.camera_id
+            camera_id: violation.camera_id,
         });
 
-        // Generate PDF
-        const pdfFileName = await generateChallanPDF(challan, violation);
-        challan.pdf_path = pdfFileName;
+        // Generate PDF and persist path
+        const relativePdfPath = await generateChallanPDF(challan, violation);
+        challan.pdf_path = relativePdfPath;
         await challan.save();
 
-        res.status(201).json(challan);
+        res.status(201).json({
+            challan_id: challan.id,
+            pdf_url: `/evidence/${relativePdfPath}`,
+            ...challan.toJSON(),
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
+
 
 exports.getAll = async (req, res) => {
     try {

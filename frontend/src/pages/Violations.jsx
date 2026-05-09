@@ -1,16 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-
-/* ─── Mock Data ──────────────────────────────────────────────── */
-const mockViolations = [
-  { id: 'V-8942', date: '2023-11-20 14:32', plate: 'MH-10-AB-1234', type: 'SPEEDING',      location: 'Vishrambagh Chowk, Sangli',  status: 'Pending',  speed: '67 km/h', evidenceImageUrl: null },
-  { id: 'V-8941', date: '2023-11-20 14:15', plate: 'MH-10-CD-5678', type: 'HELMETLESS',    location: 'Vishrambagh Chowk, Sangli',  status: 'Verified', speed: null,       evidenceImageUrl: null },
-  { id: 'V-8940', date: '2023-11-20 13:45', plate: 'MH-09-EF-9012', type: 'TRIPLE_RIDING', location: 'Pushparaj Chowk, Sangli',    status: 'Pending',  speed: null,       evidenceImageUrl: null },
-  { id: 'V-8939', date: '2023-11-20 12:10', plate: 'MH-10-GH-3456', type: 'HELMETLESS',    location: 'Vishrambagh Market, Sangli', status: 'Verified', speed: null,       evidenceImageUrl: null },
-  { id: 'V-8938', date: '2023-11-20 11:05', plate: 'MH-10-IJ-7890', type: 'SPEEDING',      location: 'Sangli–Miraj Road',          status: 'Verified', speed: '74 km/h',  evidenceImageUrl: null },
-  { id: 'V-8937', date: '2023-11-19 18:22', plate: 'UNKNOWN',        type: 'HELMETLESS',    location: 'Vishrambagh Chowk, Sangli',  status: 'Pending',  speed: null,       evidenceImageUrl: null },
-  { id: 'V-8936', date: '2023-11-19 16:45', plate: 'MH-10-KL-5555', type: 'TRIPLE_RIDING', location: 'Sangli–Miraj Road',          status: 'Pending',  speed: null,       evidenceImageUrl: null },
-  { id: 'V-8935', date: '2023-11-19 14:10', plate: 'MH-09-MN-2233', type: 'SPEEDING',      location: 'Pushparaj Chowk, Sangli',    status: 'Verified', speed: '59 km/h',  evidenceImageUrl: null },
-];
+import React, { useState, useEffect } from 'react';
+import ReviewModal from '../components/ReviewModal';
 
 const TYPE_LABEL = {
   SPEEDING:      'Speeding',
@@ -62,198 +51,38 @@ function EvidenceImage({ url, plate, type }) {
   );
 }
 
-/* ─── Review Modal ───────────────────────────────────────────── */
-function ReviewModal({ violation, onClose, onVerify, onReject }) {
-  const [notes, setNotes] = useState('');
-  const [loadingVerify, setLoadingVerify] = useState(false);
-  const [loadingReject, setLoadingReject] = useState(false);
-  const overlayRef = useRef(null);
-
-  // Close on Escape key
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  // Prevent body scroll while modal is open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
-
-  const handleOverlayClick = (e) => {
-    if (e.target === overlayRef.current) onClose();
-  };
-
-  const handleVerify = async () => {
-    setLoadingVerify(true);
-    try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetch(`/api/violations/${violation.id}/verify`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notes }),
-        });
-      } else {
-        await new Promise(r => setTimeout(r, 800)); // simulate API
-      }
-      onVerify(violation.id, notes);
-    } catch {
-      await new Promise(r => setTimeout(r, 800));
-      onVerify(violation.id, notes);
-    } finally {
-      setLoadingVerify(false);
-    }
-  };
-
-  const handleReject = async () => {
-    setLoadingReject(true);
-    try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetch(`/api/violations/${violation.id}/reject`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ notes }),
-        });
-      } else {
-        await new Promise(r => setTimeout(r, 800));
-      }
-      onReject(violation.id, notes);
-    } catch {
-      await new Promise(r => setTimeout(r, 800));
-      onReject(violation.id, notes);
-    } finally {
-      setLoadingReject(false);
-    }
-  };
-
-  const isLoading = loadingVerify || loadingReject;
-  const isPending = violation.status === 'Pending';
-
-  return (
-    <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
-      <div className="modal-panel" role="dialog" aria-modal="true" aria-label={`Reviewing ${violation.id}`}>
-
-        {/* Status Bar */}
-        <div className="modal-status-bar">
-          <span className="modal-status-dot" />
-          <span className="modal-status-text">
-            Reviewing <strong>{violation.id}</strong> · {isPending ? 'Pending Officer Decision' : `Already ${violation.status}`}
-          </span>
-          <button className="modal-close-btn" onClick={onClose} aria-label="Close modal">✕</button>
-        </div>
-
-        {/* Evidence Image */}
-        <div className="modal-evidence-wrap">
-          <EvidenceImage url={violation.evidenceImageUrl} plate={violation.plate} type={violation.type} />
-        </div>
-
-        {/* Details Grid */}
-        <div className="modal-details-grid">
-
-          <div className="modal-detail-item">
-            <span className="meta-label">Violation ID</span>
-            <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.9rem' }}>{violation.id}</span>
-          </div>
-
-          <div className="modal-detail-item">
-            <span className="meta-label">Date &amp; Time</span>
-            <span className="meta-value" style={{ fontSize: '0.88rem' }}>{violation.date}</span>
-          </div>
-
-          <div className="modal-detail-item">
-            <span className="meta-label">Plate Number</span>
-            <span className="plate-chip">{violation.plate}</span>
-          </div>
-
-          <div className="modal-detail-item">
-            <span className="meta-label">Violation Type</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: '1.1rem' }}>{TYPE_ICON[violation.type]}</span>
-              <span className={`badge ${violation.type.toLowerCase()}`}>{TYPE_LABEL[violation.type]}</span>
-            </span>
-          </div>
-
-          <div className="modal-detail-item" style={{ gridColumn: '1 / -1' }}>
-            <span className="meta-label">Location</span>
-            <span className="meta-value" style={{ fontSize: '0.88rem' }}>📍 {violation.location}</span>
-          </div>
-
-          {violation.speed && (
-            <div className="modal-detail-item">
-              <span className="meta-label">Recorded Speed</span>
-              <span style={{ color: '#FCA5A5', fontWeight: 700, fontSize: '1rem' }}>{violation.speed}</span>
-            </div>
-          )}
-
-          <div className="modal-detail-item">
-            <span className="meta-label">Current Status</span>
-            <span className={`status-dot ${violation.status.toLowerCase()}`}>{violation.status}</span>
-          </div>
-
-        </div>
-
-        {/* Officer Notes */}
-        <div className="modal-notes-wrap">
-          <label className="meta-label" htmlFor="officer-notes" style={{ display: 'block', marginBottom: 8 }}>
-            Officer Notes
-          </label>
-          <textarea
-            id="officer-notes"
-            className="officer-notes-textarea"
-            placeholder="Add remarks, observations, or justification for your decision…"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            disabled={isLoading}
-            rows={3}
-          />
-        </div>
-
-        {/* Action Buttons */}
-        <div className="modal-actions">
-          <button
-            id="btn-reject-violation"
-            className="btn btn-danger-ghost"
-            style={{ flex: 1, justifyContent: 'center' }}
-            onClick={handleReject}
-            disabled={isLoading}
-          >
-            {loadingReject ? (
-              <><span className="spinner" /> Rejecting…</>
-            ) : (
-              <>❌ Reject Violation</>
-            )}
-          </button>
-          <button
-            id="btn-verify-challan"
-            className="btn btn-verify"
-            style={{ flex: 1, justifyContent: 'center' }}
-            onClick={handleVerify}
-            disabled={isLoading}
-          >
-            {loadingVerify ? (
-              <><span className="spinner" /> Issuing…</>
-            ) : (
-              <>✅ Verify &amp; Issue Challan</>
-            )}
-          </button>
-        </div>
-
-      </div>
-    </div>
-  );
-}
 
 /* ─── Main Page ──────────────────────────────────────────────── */
 export default function Violations() {
-  const [violations, setViolations] = useState(mockViolations);
+  const [violations, setViolations] = useState([]);
   const [filter, setFilter]         = useState('All');
   const [search, setSearch]         = useState('');
-  const [reviewing, setReviewing]   = useState(null); // violation object or null
+  const [reviewing, setReviewing]   = useState(null);
   const [toasts, setToasts]         = useState([]);
+
+  // Date / type filter state
+  const [fromDate, setFromDate]   = useState('');
+  const [toDate, setToDate]       = useState('');
+  const [typeFilter, setTypeFilter] = useState('ALL');
+  const [fetching, setFetching]   = useState(false);
+
+  const fetchViolations = (params = new URLSearchParams()) => {
+    setFetching(true);
+    const token = localStorage.getItem('token');
+    fetch(`http://localhost:3000/api/violations?${params.toString()}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(data => {
+        setViolations(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setViolations([]))
+      .finally(() => setFetching(false));
+  };
+
+  // Load all violations on mount
+  useEffect(() => { fetchViolations(); }, []);
+
 
   /* Toast helper */
   const showToast = (message, type = 'success') => {
@@ -281,12 +110,13 @@ export default function Violations() {
   };
 
   const displayed = violations.filter(v => {
-    const matchFilter = filter === 'All' || v.status === filter;
+    const vStatus = (v.status || 'PENDING').toUpperCase();
+    const matchFilter = filter === 'All' || vStatus === filter.toUpperCase();
     const q = search.toLowerCase();
     const matchSearch = !q
-      || v.plate.toLowerCase().includes(q)
-      || v.location.toLowerCase().includes(q)
-      || TYPE_LABEL[v.type]?.toLowerCase().includes(q);
+      || (v.plate_number || v.plate || '').toLowerCase().includes(q)
+      || (v.location_name || v.location || '').toLowerCase().includes(q)
+      || TYPE_LABEL[v.violation_type || v.type]?.toLowerCase().includes(q);
     return matchFilter && matchSearch;
   });
 
@@ -350,6 +180,95 @@ export default function Violations() {
         </div>
       </div>
 
+      {/* ── Date / Type Filter Bar ───────────────────────────────── */}
+      <div style={{
+        display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end',
+        background: 'var(--panel-bg)', border: '1px solid var(--border-color)',
+        borderRadius: 12, padding: '14px 18px', marginBottom: 18,
+      }}>
+        {/* From date */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>From</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={e => setFromDate(e.target.value)}
+            style={{
+              padding: '7px 10px', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.85rem',
+              background: 'var(--panel-bg)', color: 'var(--text-bright)',
+              border: '1px solid var(--border-color)', outline: 'none', colorScheme: 'dark',
+            }}
+          />
+        </div>
+
+        {/* To date */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>To</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={e => setToDate(e.target.value)}
+            style={{
+              padding: '7px 10px', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.85rem',
+              background: 'var(--panel-bg)', color: 'var(--text-bright)',
+              border: '1px solid var(--border-color)', outline: 'none', colorScheme: 'dark',
+            }}
+          />
+        </div>
+
+        {/* Violation type */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Violation Type</label>
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            style={{
+              padding: '7px 10px', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.85rem',
+              background: 'var(--panel-bg)', color: 'var(--text-bright)',
+              border: '1px solid var(--border-color)', outline: 'none', cursor: 'pointer',
+            }}
+          >
+            <option value="ALL">ALL</option>
+            <option value="SPEEDING">SPEEDING</option>
+            <option value="HELMETLESS">HELMETLESS</option>
+            <option value="TRIPLE_RIDING">TRIPLE RIDING</option>
+          </select>
+        </div>
+
+        {/* Apply */}
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={fetching}
+          onClick={() => {
+            const params = new URLSearchParams();
+            if (fromDate) params.append('from', fromDate);
+            if (toDate)   params.append('to', toDate);
+            if (typeFilter !== 'ALL') params.append('violation_type', typeFilter);
+            fetchViolations(params);
+          }}
+          style={{ alignSelf: 'flex-end', padding: '8px 20px' }}
+        >
+          {fetching ? '⏳ Loading…' : '🔍 Apply Filter'}
+        </button>
+
+        {/* Clear */}
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            setFromDate(''); setToDate(''); setTypeFilter('ALL');
+            fetchViolations();
+          }}
+          style={{ alignSelf: 'flex-end', padding: '8px 16px' }}
+        >
+          ✕ Clear
+        </button>
+
+        {/* Result count */}
+        <div style={{ marginLeft: 'auto', alignSelf: 'flex-end', fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          Showing <strong style={{ color: 'var(--text-bright)' }}>{violations.length}</strong> violation{violations.length !== 1 ? 's' : ''}
+        </div>
+      </div>
+
       {/* Summary Chips */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 22, flexWrap: 'wrap' }}>
         {[
@@ -390,22 +309,24 @@ export default function Violations() {
             ) : displayed.map(v => (
               <tr key={v.id}>
                 <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>{v.id}</td>
-                <td style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{v.date}</td>
+                <td style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                  {v.created_at ? new Date(v.created_at).toLocaleString('en-IN') : (v.date || '—')}
+                </td>
                 <td>
-                  <span className="plate-chip">{v.plate}</span>
+                  <span className="plate-chip">{v.plate_number || v.plate || 'UNKNOWN'}</span>
                 </td>
                 <td>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span style={{ fontSize: '1.1rem' }}>{TYPE_ICON[v.type]}</span>
-                    <span className={`badge ${v.type.toLowerCase()}`}>{TYPE_LABEL[v.type]}</span>
+                    <span style={{ fontSize: '1.1rem' }}>{TYPE_ICON[v.violation_type || v.type]}</span>
+                    <span className={`badge ${(v.violation_type || v.type || '').toLowerCase()}`}>{TYPE_LABEL[v.violation_type || v.type] || v.violation_type || v.type}</span>
                   </span>
                 </td>
-                <td style={{ fontSize: '0.85rem', maxWidth: 200 }}>{v.location}</td>
-                <td style={{ fontSize: '0.85rem', color: v.speed ? '#FCA5A5' : 'var(--text-muted)' }}>
-                  {v.speed || '—'}
+                <td style={{ fontSize: '0.85rem', maxWidth: 200 }}>{v.location_name || v.location || '—'}</td>
+                <td style={{ fontSize: '0.85rem', color: (v.speed_kmh || v.speed) ? '#FCA5A5' : 'var(--text-muted)' }}>
+                  {v.speed_kmh ? `${v.speed_kmh} km/h` : (v.speed || '—')}
                 </td>
                 <td>
-                  <span className={`status-dot ${v.status.toLowerCase()}`}>{v.status}</span>
+                  <span className={`status-dot ${(v.status || 'pending').toLowerCase()}`}>{v.status || 'PENDING'}</span>
                 </td>
                 <td>
                   <button

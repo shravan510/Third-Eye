@@ -28,6 +28,7 @@ app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/violations', require('./routes/violations.routes'));
 app.use('/api/challans', require('./routes/challans.routes'));
 app.use('/api/cameras', require('./routes/cameras.routes'));
+app.use('/api/fine-settings', require('./routes/fineSettings.routes'));
 
 const PORT = process.env.PORT || 3000;
 
